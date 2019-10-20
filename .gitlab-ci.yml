@@ -1,0 +1,54 @@
+stages:
+  - build
+  - rollup
+  - test
+  - deploy
+  - rollback
+
+
+variables:
+
+  PROJECT_NAME: wordpress
+  STACK_NAME: website1
+
+  CI_MANIFEST_ID: ${PROJECT_NAME}-${CI_PIPELINE_ID}
+  
+  IMAGE_ADDR_PROD_CURRENT: hub.private.registry/production/${STACK_NAME}.${PROJECT_NAME}:${CI_COMMIT_TAG}
+  IMAGE_ADDR_PROD_LATEST: hub.private.registry/production/${STACK_NAME}.${PROJECT_NAME}:latest
+
+
+####################### BUILD SECTION ##########################
+  
+build-k8s-prod:
+    stage: build
+    variables:
+        GIT_STRATEGY: fetch
+    script:
+        - >
+             docker build
+             --build-arg NODE_ENV=production
+             -f Dockerfile
+             -t $IMAGE_ADDR_PROD_CURRENT .
+        - docker push $IMAGE_ADDR_PROD_CURRENT
+        - docker tag $IMAGE_ADDR_PROD_CURRENT $IMAGE_ADDR_PROD_LATEST
+        - docker push $IMAGE_ADDR_PROD_LATEST
+    only:
+        - tags
+    tags:
+        - kuber-prod       
+    except:
+        - branches
+
+###################### DEPLOY SECTION ##########################
+
+deploy-k8s-prod:
+    stage: deploy
+    script:
+        - curl -s http://localhost/master/$STACK_NAME/$PROJECT_NAME/$CI_PIPELINE_ID
+        - curl -s http://localhost/rollouts/master/$STACK_NAME/$PROJECT_NAME
+    only:
+        - tags
+    tags:
+        - kuber-prod       
+    except:
+        - branches
